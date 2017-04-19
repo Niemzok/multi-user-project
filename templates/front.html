@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h1>/myBlog/</h1>
+<h2>hello {{username}}</h2>
+<div class="nav">
+  <div class="nav"> <a href={{base_url+logout_url}}>Logout</a></div>
+  <div class="nav"> <a href={{base_url+newpost_url}}>Compose</a></div>
+</div>
+<hr>
+
+{% for blog in blogs %}
+<div class="blog">
+    <div class="post-title">{{blog.subject}}</div>
+    <div class="post-date"> {{blog.created.strftime('%d/%m/%y %H:%M')}} by {{blog.author}}</div>
+    <pre  class="post-content">{{blog.body}}</pre>
+  <form class="post-upvote" method="post">
+    <input type="hidden" name="post_id" value="{{blog.key().id()}}"></id>
+    <input type="submit" name="upvote" value=Upvote></input>
+  </form>
+  <div class="post-upvotes">{{blog.upvotes}}</div>
+
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}
