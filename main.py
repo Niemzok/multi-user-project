@@ -32,7 +32,7 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir),
 
 SECRET = '50DC2590767F20A75420ADDE345E339D'
 
-BASE_URL = 'http://udacity-157413.appspot.com/'
+BASE_URL = 'http://localhost:8080/'
 LOGOUT_URL = '/logout'
 SIGNUP_URL = '/signup'
 NEWPOST_URL = '/blog/newpost'
