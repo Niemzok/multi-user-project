@@ -32,7 +32,7 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir),
 
 SECRET = '50DC2590767F20A75420ADDE345E339D'
 
-BASE_URL = 'http://localhost:8080/'
+BASE_URL = 'http://localhost:8080'
 LOGOUT_URL = '/logout'
 SIGNUP_URL = '/signup'
 NEWPOST_URL = '/blog/newpost'
@@ -287,8 +287,9 @@ class SignUp(Handler):
                         username, password), email=email)
             user.put()
             user_id = str(user.key.id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s;'+
-                                      'Path=/' % self.make_secure_val(user_id)))
+            self.response.headers.add('Set-Cookie',
+                                      str('user_id=%s;Path=/'
+                                      % self.make_secure_val(user_id)))
             self.redirect('/welcome')
 
 
@@ -308,8 +309,8 @@ class Login(Handler):
 
         if user and self.valid_pw(username, password, user.password):
             user_id = str(user.key.id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s;'+
-                                      'Path=/' % self.make_secure_val(user_id)))
+            self.response.headers.add('Set-Cookie', str('user_id=%s;Path=/'
+                                      % self.make_secure_val(user_id)))
             self.redirect('/welcome')
 
 
