@@ -2,7 +2,8 @@
 
 This project is the result of following the Full Stack Web Development
 Nanodegree at Udacity.com. Goal of the project is to develop and show basic
-backend and database handling using google app engine(GAE).
+backend and database handling using google app engine(GAE). The deployed version
+can be found [here](http://udacity-157413.appspot.com/)
 
 ## Installation
 For a local installation you will need to install:
