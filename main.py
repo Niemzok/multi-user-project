@@ -18,30 +18,32 @@ import hashlib
 import string
 import sys
 import hmac
-import datetime
 
 import jinja2
 import webapp2
 
 from google.appengine.ext import db
 
+from models import Blog, User, Comment
+
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
-jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir),
-                               autoescape = True)
-USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
-EMAIL_RE = re.compile("^[\S]+@[\S]+.[\S]+$")
-PASSWORD_RE = re.compile("^.{3,20}$")
+jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir),
+                               autoescape=True)
 
 SECRET = '50DC2590767F20A75420ADDE345E339D'
 
-BASE_URL ='http://localhost:8080'
+BASE_URL = 'http://localhost:8080'
 LOGOUT_URL = '/logout'
 SIGNUP_URL = '/signup'
 NEWPOST_URL = '/blog/newpost'
-
+MAIN_URL = '/blog'
 
 
 class Handler(webapp2.RequestHandler):
+    USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
+    EMAIL_RE = re.compile("^[\S]+@[\S]+.[\S]+$")
+    PASSWORD_RE = re.compile("^.{3,20}$")
+
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
 
@@ -53,13 +55,13 @@ class Handler(webapp2.RequestHandler):
         self.write(self.render_str(template, **kw))
 
     def valid_username(self, username):
-        return USER_RE.match(username)
+        return self.USER_RE.match(username)
 
     def valid_email(self, email):
-        return EMAIL_RE.match(email)
+        return self.EMAIL_RE.match(email)
 
     def valid_password(self, password):
-        return PASSWORD_RE.match(password)
+        return self.PASSWORD_RE.match(password)
 
     def make_salt(self):
         return ''.join(random.choice(string.letters) for x in xrange(5))
@@ -69,10 +71,9 @@ class Handler(webapp2.RequestHandler):
         return '%s|%s' % (val, h)
 
     def valid_val(self, h):
-        ###Your code here
         if h:
-          val = h.split('|')[0]
-          return self.make_secure_val(val) == h
+            val = h.split('|')[0]
+            return self.make_secure_val(val) == h
 
     def unique_username(self, username):
         result = []
@@ -82,14 +83,15 @@ class Handler(webapp2.RequestHandler):
         return len(result) == 0
 
     def lookup_user(self, username):
-        db_user = User.all().filter('username =', username)
+        query = User.query().filter(User.username == username)
+        db_user = query.fetch(1)
         return db_user
 
     def make_salt(self):
         return ''.join(random.choice(string.letters) for x in xrange(5))
 
     def make_pw_hash(self, name, pw, salt=None):
-        if salt == None:
+        if salt is None:
             salt = self.make_salt()
         h = hashlib.sha256(name + pw + salt).hexdigest()
         return '%s,%s' % (h, salt)
@@ -104,101 +106,143 @@ class Handler(webapp2.RequestHandler):
             user = User.get_by_id(int(user_id_hash.split('|')[0]))
             return user
 
+    @staticmethod
+    def login_required(func):
+        """
+        A decorator to confirm a user is logged in or redirect as needed.
+        """
+        def login(self, *args, **kwargs):
+            user = self.logged_in_user()
+            # Redirect to login if user not logged in, else execute func.
+            if not user:
+                self.redirect("/login")
+            else:
+                func(self, *args, **kwargs)
+        return login
 
 
-class Blog(db.Model):
-    subject = db.StringProperty(required = True)
-    body = db.TextProperty(required = True)
-    created = db.DateTimeProperty(auto_now_add = True)
-    author = db.StringProperty(required = True)
-    upvotes = db.IntegerProperty(required = False)
-
-class User(db.Model):
-    username = db.StringProperty(required=True)
-    password = db.StringProperty(required=True)
-    email = db.StringProperty(required=False)
-    registered = db.DateTimeProperty(auto_now_add = True)
-
-
-class MainPage(Handler):
-    def render_front(self, username = "", error=""):
-        blogs = db.GqlQuery("SELECT * FROM Blog "
-                        "ORDER BY created DESC")
-        self.render("front.html", error=error, username=username, blogs=blogs,
-                                  base_url=BASE_URL, logout_url=LOGOUT_URL,
-                                  newpost_url=NEWPOST_URL)
-
-    def get(self):
-        user = self.logged_in_user()
-        if user:
-            self.render_front(user.username)
-        else:
-            self.redirect('/signup')
-
+class UpvoteHandler(Handler):
+    @Handler.login_required
     def post(self):
+        user = self.logged_in_user()
         upvote = self.request.get("upvote")
         post_id = self.request.get("post_id")
-        print "post id:", post_id
         if upvote:
             post = Blog.get_by_id(int(post_id))
-            if post.upvotes:
-                post.upvotes += 1
-            else:
-                post.upvotes = 1
-            post.put()
+            if post is not None:
+                if user.key not in post.upvotes:
+                    post.upvotes.append(user.key)
+                    post.put()
+        self.redirect('/blog')
+
+
+class MainPage(UpvoteHandler):
+    def render_front(self, username="", error=""):
+        qry = Blog.query().order(-Blog.date_created)
+        blogs = qry.fetch(10)
+        self.render("front.html", error=error, username=username, posts=blogs,
+                    base_url=BASE_URL, logout_url=LOGOUT_URL,
+                    newpost_url=NEWPOST_URL, main_url=MAIN_URL)
+
+    @UpvoteHandler.login_required
+    def get(self):
         user = self.logged_in_user()
-        if user:
-            self.render_front(user.username)
+        self.render_front(user.username)
 
 
 class NewBlog(Handler):
+    @Handler.login_required
     def get(self):
-        user = self.logged_in_user()
-        if user:
-            self.render("newblog.html")
-        else:
-            self.redirect('/signup')
+        self.render("newblog.html", base_url=BASE_URL, main_url=MAIN_URL)
 
-
+    @Handler.login_required
     def post(self):
         user = self.logged_in_user()
         subject = self.request.get("subject")
         body = self.request.get("content")
         if subject and body:
-            blog = Blog(subject=subject, body=body, author=user.username)
+            blog = Blog(subject=subject, body=body, author=user.key)
             blog.put()
-            post_id = blog.key().id()
-            self.redirect('/blog/%s' % post_id )
+            post_id = blog.key.integer_id()
+            self.redirect('/blog/%s' % post_id)
         else:
             error = "You need a headliner and content for your blog post."
-            self.render("newblog.html", subject=subject, content=body, error=error)
+            self.render("newblog.html", subject=subject, content=body,
+                        error=error)
+
 
 class BlogPost(Handler):
     def render_post(self, post_id="", username="", error=""):
         post = Blog.get_by_id(int(post_id))
-        created = post.created.strftime('%d/%m/%y %H:%M')
+        created = post.date_created.strftime('%d/%m/%y %H:%M')
+        author = post.author
+        qry = Comment.query().order(-Comment.date_created).filter(
+              Comment.post == post.key)
+        comments = qry.fetch()
         self.render("post.html", error=error, subject=post.subject,
-                     body=post.body, date_created=created, username=username,
-                     author=post.author, base_url=BASE_URL)
+                    body=post.body, date_created=created, username=username,
+                    author=author.get().username, post_id=str(post.key.id()),
+                    base_url=BASE_URL, main_url=MAIN_URL, comments=comments)
 
+    @Handler.login_required
     def get(self, post_id):
         user = self.logged_in_user()
-        if user:
+        self.render_post(post_id=post_id, username=user.username)
+
+    @Handler.login_required
+    def post(self, post_id):
+        user = self.logged_in_user()
+        post = Blog.get_by_id(int(post_id))
+        delete = self.request.get("delete")
+        comment = self.request.get("comment")
+        if delete and user.key == post.author:
+            post.key.delete()
+            self.redirect(MAIN_URL)
+        elif comment:
+            comm = Comment(comment=comment, author=user.key, post=post.key)
+            comm.put()
             self.render_post(post_id=post_id, username=user.username)
         else:
-            self.redirect('/signup')
+            self.render_post(post_id=post_id, username=user.username)
+
+
+class EditPost(Handler):
+    @Handler.login_required
+    def get(self, post_id):
+        user = self.logged_in_user()
+        post = Blog.get_by_id(int(post_id))
+        if user.key == post.author:
+            subject = post.subject
+            content = post.body
+            self.render("newblog.html", base_url=BASE_URL, main_url=MAIN_URL,
+                        subject=subject, content=content)
+        else:
+            self.redirect(MAIN_URL)
+
+    @Handler.login_required
+    def post(self, post_id):
+        user = self.logged_in_user()
+        subject = self.request.get("subject")
+        body = self.request.get("content")
+        if subject and body:
+            post = Blog.get_by_id(int(post_id))
+            post.subject = subject
+            post.body = body
+            post.put()
+            post_id = post.key.integer_id()
+            self.redirect('/blog/%s' % post_id)
+        else:
+            error = "You need a headliner and content for your blog post."
+            self.render("newblog.html", subject=subject, content=body,
+                        error=error)
 
 
 class SignUp(Handler):
-    """docstring for SignUp."""
-    def write_form(self, user_error="", email_error="", password_error="", verify_error="",
-                    username="", email=""):
+    def write_form(self, user_error="", email_error="", password_error="",
+                   verify_error="", username="", email=""):
         self.render("signup.html", user_error=user_error,
-                                   email_error=email_error,
-                                   password_error=password_error,
-                                   verify_error=verify_error,
-                                   username=username,
-                                   email=email)
+                    email_error=email_error, password_error=password_error,
+                    verify_error=verify_error, username=username, email=email)
 
     def get(self):
         self.write_form()
@@ -213,8 +257,6 @@ class SignUp(Handler):
         password = self.request.get("password")
         verify = self.request.get("verify")
 
-
-
         u_username = self.valid_username(username)
         if email:
             u_email = self.valid_email(email)
@@ -225,9 +267,10 @@ class SignUp(Handler):
         if not self.unique_username(username):
             user_error = "This user already existis"
             self.write_form(user_error, email_error, password_error,
-                             verify_error, username, email)
+                            verify_error, username, email)
 
-        elif not(u_username and u_email and u_password and (password == verify)):
+        elif not(u_username and u_email and u_password and (
+                 password == verify)):
             if not u_username:
                 user_error = "This is not a valid username."
             if not u_email:
@@ -238,13 +281,16 @@ class SignUp(Handler):
                 verify_error = "Your passwords did not match."
 
             self.write_form(user_error, email_error, password_error,
-                             verify_error, username, email)
+                            verify_error, username, email)
         else:
-            user = User(username=username, password=self.make_pw_hash(username, password), email=email)
+            user = User(username=username, password=self.make_pw_hash(
+                        username, password), email=email)
             user.put()
-            user_id = str(user.key().id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s; Path=/' % self.make_secure_val(user_id)))
+            user_id = str(user.key.id())
+            self.response.headers.add('Set-Cookie', str('user_id=%s;
+                                      Path=/' % self.make_secure_val(user_id)))
             self.redirect('/welcome')
+
 
 class Login(Handler):
     def write_form(self, login_error=""):
@@ -258,12 +304,14 @@ class Login(Handler):
         username = self.request.get("username")
         password = self.request.get("password")
 
-        user = self.lookup_user(username)
+        user = self.lookup_user(username)[0]
 
-        if user and self.valid_pw(username, password, user[0].password):
-            user_id = str(user[0].key().id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s; Path=/' % self.make_secure_val(user_id)))
+        if user and self.valid_pw(username, password, user.password):
+            user_id = str(user.key.id())
+            self.response.headers.add('Set-Cookie', str('user_id=%s;
+                                      Path=/' % self.make_secure_val(user_id)))
             self.redirect('/welcome')
+
 
 class Logout(Handler):
     def get(self):
@@ -271,21 +319,12 @@ class Logout(Handler):
         self.redirect(SIGNUP_URL)
 
 
-
-
 class Welcome(Handler):
     """docstring for Welcome."""
+    @Handler.login_required
     def get(self):
         user = self.logged_in_user()
-        if user:
-            self.render("welcome.html", username=user.username, base_url=BASE_URL)
-
-        else:
-            self.redirect('/signup')
-
-
-
-
+        self.render("welcome.html", username=user.username, base_url=BASE_URL)
 
 app = webapp2.WSGIApplication([(r'/blog', MainPage),
                               (NEWPOST_URL, NewBlog),
@@ -294,5 +333,6 @@ app = webapp2.WSGIApplication([(r'/blog', MainPage),
                               (r'/welcome', Welcome),
                               (r'/login', Login),
                               (LOGOUT_URL, Logout),
-                              (r'/', MainPage) ]
-                               , debug=True)
+                              (r'/', MainPage),
+                              (r'/blog/(\d+)/edit', EditPost)],
+                              debug=True)

@@ -10,18 +10,16 @@
 </div>
 <hr>
 
-{% for blog in blogs %}
-<div class="blog">
-    <div class="post-title">{{blog.subject}}</div>
-    <div class="post-date"> {{blog.created.strftime('%d/%m/%y %H:%M')}} by {{blog.author}}</div>
-    <pre  class="post-content">{{blog.body}}</pre>
+{% for post in posts %}
+<div class="post">
+    <div class="post-title"><a href={{base_url+main_url+'/'+post.key.id()|string}}>{{post.subject}}</a></div>
+    <div class="post-date"> {{post.date_created.strftime('%d/%m/%y %H:%M')}} by {{post.author.get().username}}</div>
+    <pre  class="post-content">{{post.body}}</pre>
   <form class="post-upvote" method="post">
-    <input type="hidden" name="post_id" value="{{blog.key().id()}}"></id>
+    <input type="hidden" name="post_id" value="{{post.key.id()}}"></input>
     <input type="submit" name="upvote" value=Upvote></input>
   </form>
-  <div class="post-upvotes">{{blog.upvotes}}</div>
-
-  </div>
+  <div class="post-upvotes">{{post.upvotes|length}}</div>
 </div>
 {% endfor %}
 
