@@ -287,8 +287,8 @@ class SignUp(Handler):
                         username, password), email=email)
             user.put()
             user_id = str(user.key.id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s;
-                                      Path=/' % self.make_secure_val(user_id)))
+            self.response.headers.add('Set-Cookie', str('user_id=%s;'+
+                                      'Path=/' % self.make_secure_val(user_id)))
             self.redirect('/welcome')
 
 
@@ -308,8 +308,8 @@ class Login(Handler):
 
         if user and self.valid_pw(username, password, user.password):
             user_id = str(user.key.id())
-            self.response.headers.add('Set-Cookie', str('user_id=%s;
-                                      Path=/' % self.make_secure_val(user_id)))
+            self.response.headers.add('Set-Cookie', str('user_id=%s;'+
+                                      'Path=/' % self.make_secure_val(user_id)))
             self.redirect('/welcome')
 
 
