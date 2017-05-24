@@ -14,7 +14,7 @@
   {% if username==author %}
   <a class="post-edit" href={{base_url+main_url+'/'+post_id+'/edit'}}>Edit</a>
   <form  method="post"> <input class="post-delete" type="submit" name="delete" value="Delete"></form>
-  {% else %}
+  {% endif %}
   <form  name="comment" method="post">
     <label>
       <div>Comment</div>
@@ -23,7 +23,6 @@
     <div class="error"> {{error}}</div>
     <input type="submit">´
   </form>
-  {% endif %}
   {% for comment in comments %}
   <div class="comment">
     <div class="post-date"> {{comment.date_created.strftime('%d/%m/%y %H:%M')}} by {{comment.author.get().username}}</div>

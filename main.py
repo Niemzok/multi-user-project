@@ -33,6 +33,7 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir),
 SECRET = '50DC2590767F20A75420ADDE345E339D'
 
 BASE_URL = 'http://localhost:8080'
+#BASE_URL = 'https://udacity-157413.appspot.com'
 LOGOUT_URL = '/logout'
 SIGNUP_URL = '/signup'
 NEWPOST_URL = '/blog/newpost'
@@ -120,6 +121,22 @@ class Handler(webapp2.RequestHandler):
                 func(self, *args, **kwargs)
         return login
 
+    # @staticmethod
+    # def post_exists(func, post_id=""):
+    #     """
+    #     A decorator to confirm a post does exist in the database.
+    #     """
+    #     def post_check(self, post_id="", *args, **kwargs):
+    #         if post_id == "":
+    #             post_id = self.request.get("post_id")
+    #         print "POST ID !!!!!!!!!!!!!!!!!!!!!!!",    post_id
+    #         post = Blog.get_by_id(int(post_id))
+    #         if not post:
+    #             self.redirect(MAIN_URL)
+    #         else:
+    #             func(self, *args, **kwargs)
+    #     return post_check
+
 
 class UpvoteHandler(Handler):
     @Handler.login_required
@@ -129,7 +146,7 @@ class UpvoteHandler(Handler):
         post_id = self.request.get("post_id")
         if upvote:
             post = Blog.get_by_id(int(post_id))
-            if post is not None:
+            if post and post.author != user.key:
                 if user.key not in post.upvotes:
                     post.upvotes.append(user.key)
                     post.put()
@@ -174,15 +191,18 @@ class NewBlog(Handler):
 class BlogPost(Handler):
     def render_post(self, post_id="", username="", error=""):
         post = Blog.get_by_id(int(post_id))
-        created = post.date_created.strftime('%d/%m/%y %H:%M')
-        author = post.author
-        qry = Comment.query().order(-Comment.date_created).filter(
-              Comment.post == post.key)
-        comments = qry.fetch()
-        self.render("post.html", error=error, subject=post.subject,
-                    body=post.body, date_created=created, username=username,
-                    author=author.get().username, post_id=str(post.key.id()),
-                    base_url=BASE_URL, main_url=MAIN_URL, comments=comments)
+        if post:
+            created = post.date_created.strftime('%d/%m/%y %H:%M')
+            author = post.author
+            qry = Comment.query().order(-Comment.date_created).filter(
+                  Comment.post == post.key)
+            comments = qry.fetch()
+            self.render("post.html", error=error, subject=post.subject,
+                        body=post.body, date_created=created, username=username,
+                        author=author.get().username, post_id=str(post.key.id()),
+                        base_url=BASE_URL, main_url=MAIN_URL, comments=comments)
+        else:
+            self.redirect(MAIN_URL)
 
     @Handler.login_required
     def get(self, post_id):
@@ -195,23 +215,27 @@ class BlogPost(Handler):
         post = Blog.get_by_id(int(post_id))
         delete = self.request.get("delete")
         comment = self.request.get("comment")
-        if delete and user.key == post.author:
-            post.key.delete()
-            self.redirect(MAIN_URL)
-        elif comment:
-            comm = Comment(comment=comment, author=user.key, post=post.key)
-            comm.put()
-            self.render_post(post_id=post_id, username=user.username)
+        if post:
+            if delete and user.key == post.author:
+                post.key.delete()
+                self.redirect(MAIN_URL)
+            elif comment:
+                comm = Comment(comment=comment, author=user.key, post=post.key)
+                comm.put()
+                self.render_post(post_id=post_id, username=user.username)
+            else:
+                self.render_post(post_id=post_id, username=user.username)
         else:
-            self.render_post(post_id=post_id, username=user.username)
+            self.redirect(MAIN_URL)
 
 
 class EditPost(Handler):
+
     @Handler.login_required
     def get(self, post_id):
         user = self.logged_in_user()
         post = Blog.get_by_id(int(post_id))
-        if user.key == post.author:
+        if post and user.key == post.author:
             subject = post.subject
             content = post.body
             self.render("newblog.html", base_url=BASE_URL, main_url=MAIN_URL,
@@ -224,17 +248,20 @@ class EditPost(Handler):
         user = self.logged_in_user()
         subject = self.request.get("subject")
         body = self.request.get("content")
-        if subject and body:
-            post = Blog.get_by_id(int(post_id))
-            post.subject = subject
-            post.body = body
-            post.put()
-            post_id = post.key.integer_id()
-            self.redirect('/blog/%s' % post_id)
+        post = Blog.get_by_id(int(post_id))
+        if post and user.key == post.author:
+            if subject and body:
+                post.subject = subject
+                post.body = body
+                post.put()
+                post_id = post.key.integer_id()
+                self.redirect('/blog/%s' % post_id)
+            else:
+                error = "You need a headliner and content for your blog post."
+                self.render("newblog.html", subject=subject, content=body,
+                            error=error)
         else:
-            error = "You need a headliner and content for your blog post."
-            self.render("newblog.html", subject=subject, content=body,
-                        error=error)
+            self.redirect(MAIN_URL)
 
 
 class SignUp(Handler):
